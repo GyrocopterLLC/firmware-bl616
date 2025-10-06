@@ -53,3 +53,7 @@ Menu *create_snes_menu(const char *imgdir);
 extern bool floppy[2];
 extern std::string floppy_fname[2];
 extern USB_NOCACHE_RAM_SECTION FIL f_floppy[2];
+
+extern bool srm_ok;
+extern std::string srm_fname;
+extern USB_NOCACHE_RAM_SECTION FIL f_srm;

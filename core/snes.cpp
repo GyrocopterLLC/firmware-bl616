@@ -5,6 +5,10 @@
 #include "cores.h"
 #include "overlay.h"
 
+bool srm_ok;
+std::string srm_fname;
+USB_NOCACHE_RAM_SECTION FIL f_srm;
+
 int loadsnesbsram(const char* fname, unsigned int expected_filesize);
 
 // return 0 if snes header is successfully parsed at off
@@ -145,12 +149,12 @@ int loadsnes(const char *fname) {
         std::string rom_title{rom_name, rom_name.find_last_of('/')+1};
         rom_title.erase(rom_title.find_last_of('.'));
 
-        floppy_fname[0].clear();
-        floppy_fname[0].append(save_dir);
-        floppy_fname[0].append(rom_title);
-        floppy_fname[0].append(".srm");
+        srm_fname.clear();
+        srm_fname.append(save_dir);
+        srm_fname.append(rom_title);
+        srm_fname.append(".srm");
         
-        loadsnesbsram(floppy_fname[0].c_str(), ((1 << ram_size)*1024));
+        loadsnesbsram(srm_fname.c_str(), ((1 << ram_size)*1024));
     }
 
     core_running = true;
@@ -168,7 +172,8 @@ const int BSRAM_CHUNK_SIZE = 512;
 
 int loadsnesbsram(const char* fname, unsigned int expected_filesize) {
     int r = 1;
-    
+    srm_ok = false;
+
     DEBUG("loadsnes bsram begin");
 
     // check extension is .srm (bsram save file)
@@ -181,7 +186,7 @@ int loadsnesbsram(const char* fname, unsigned int expected_filesize) {
     r = f_stat(fname, &fno);
     if(FR_NO_FILE == r) {
         overlay_status("Creating new %dK srm file", expected_filesize >> 10);
-        r = f_open(&f_floppy[0], fname, FA_WRITE|FA_CREATE_ALWAYS);
+        r = f_open(&f_srm, fname, FA_WRITE|FA_CREATE_ALWAYS);
         if(FR_OK != r) {
             overlay_status("Failed creating .srm file");
             return r;
@@ -189,14 +194,14 @@ int loadsnesbsram(const char* fname, unsigned int expected_filesize) {
         unsigned int bytes_written = 0;
         memset(fbuf, 0, BSRAM_CHUNK_SIZE);
         for(unsigned int i = 0; i < expected_filesize; i += BSRAM_CHUNK_SIZE) {
-            r = f_write(&f_floppy[0], fbuf, BSRAM_CHUNK_SIZE, &bytes_written);
+            r = f_write(&f_srm, fbuf, BSRAM_CHUNK_SIZE, &bytes_written);
             if((FR_OK != r) || (BSRAM_CHUNK_SIZE != bytes_written)) {
                 overlay_status(".srm file write failure");
                 return r;
             }
         }
-        r = f_close(&f_floppy[0]);
-        floppy[0] = true;
+        r = f_close(&f_srm);
+        srm_ok = true;
         if(FR_OK != r) {
             overlay_status (".srm file close failure");
             return r;
@@ -209,37 +214,31 @@ int loadsnesbsram(const char* fname, unsigned int expected_filesize) {
             //              01234567890123456789012345678901
             overlay_status("SRM Length %dK != expect %dK", filelen>>10, expected_filesize>>10);
         }
-        r = f_open(&f_floppy[0], fname, FA_READ);
+        r = f_open(&f_srm, fname, FA_READ);
         if(FR_OK != r) {
             overlay_status("Cannot open SRM file");
             return r;
         }
-        floppy[0] = true;
+        srm_ok = true;
 
         unsigned int bytes_read = 0;
         unsigned int total = 0;
         do {
-            if((r = f_read(&f_floppy[0], fbuf, BSRAM_CHUNK_SIZE, &bytes_read)) != FR_OK){
+            if((r = f_read(&f_srm, fbuf, BSRAM_CHUNK_SIZE, &bytes_read)) != FR_OK){
                 break;
             }
             if(bytes_read == 0) {
                 break;
             }
-            // Send bsram address for this chunk
+
+            // Send bsram address and data for this chunk
             // block num = total / 512
             unsigned int block_num = total >> 9;
             taskENTER_CRITICAL();
-            fpga_tx_header(0x0b, 5); // 0x0b addr[15:0] data[15:0]: write to disk management interface (mgmt_address and mgmt_writedata)
-            fpga_tx_byte(0xF2); // pretend that F200 is the register for block num
-            fpga_tx_byte(0x00);
+            fpga_tx_header(0x0E, BSRAM_CHUNK_SIZE+3); // 0x0e blocknum[15:0] <data> send a sector (512 bytes) of data to BSRAM memory
+                                                      // first 2 bytes = block number, followed by 512 bytes of data
             fpga_tx_byte(block_num >> 8);
-            fpga_tx_byte(block_num & 0xff);
-            taskEXIT_CRITICAL();
-
-            // And now send the data
-            taskENTER_CRITICAL();
-            fpga_tx_header(0x0A, BSRAM_CHUNK_SIZE+1); // 0x0a <data_sector>: send a sector (512 bytes) of data to floppy data FIFO
-            // this will appear as a write to F20F in the snes iosys_bl616 module
+            fpga_tx_byte(block_num & 0xFF);
             for (int i = 0; i < BSRAM_CHUNK_SIZE; i ++) {
                 fpga_tx_byte(fbuf[i]);
             }
@@ -250,7 +249,7 @@ int loadsnesbsram(const char* fname, unsigned int expected_filesize) {
             }
         } while(bytes_read == BSRAM_CHUNK_SIZE);
 
-        f_close(&f_floppy[0]);
+        f_close(&f_srm);
     }    
 
     return r;

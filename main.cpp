@@ -135,7 +135,7 @@ static int menu_loadrom(const char *dir) {
     // find core info entry
     core_info *core = NULL;
     string path = fname.substr(fname.find(":")+1);
-    for (unsigned int i = 0; i < core_info_list.size(); i++) {
+    for (int i = 0; i < core_info_list.size(); i++) {
         core_info *c = &core_info_list[i];
         if (path.find(c->rom_dir) == 0) {
             overlay_status("ROM for: %s", c->display_name);
@@ -337,16 +337,11 @@ static void uart1_rx_task(void *pvParameters)
                 if (pos == 6+511) {
                     uint16_t drive = buffer[0] >> 7;
                     uint16_t sector = (buffer[0] & 0x7f) << 8 | buffer[1];
-                    if(active_core == 2) { drive = 0; } // for SNES, only worry about the SRM file on floppy[0]
                     if (floppy[drive]) {
                         UINT br;
                         f_lseek(&f_floppy[drive], sector * 512);
                         if (f_write(&f_floppy[drive], fbuf, 512, &br) != FR_OK) {
-                            if(active_core == 2) {
-                                overlay_status("Failed to write to SRM");
-                            } else {
-                                overlay_status("Failed to write floppy");
-                            }
+                            overlay_status("Failed to write floppy");
                         }
                     }
                     pos = 0;   // reset for next packet
@@ -357,36 +352,54 @@ static void uart1_rx_task(void *pvParameters)
                 if (pos == 5) {
                     uint16_t drive = buffer[0] >> 7;
                     uint16_t sector = (buffer[0] & 0x7f) << 8 | buffer[1];
-                    if(active_core == 2) { // SNES core uses this command to open or close the SRM file
-                        // Notes:
-                        // drive is unused. always drive[0] for the srm file
-                        // sector = 1 to open file, 0 to close file
-                        if(floppy[0]) { // don't try unless SRM already setup in loadsnes
-                            if(sector == 0) {
-                                f_close(&f_floppy[0]);
-                            } else if(sector == 1) {
-                                if(f_open(&f_floppy[0], floppy_fname[0].c_str(), FA_WRITE|FA_OPEN_EXISTING) != FR_OK)
-                                    overlay_status("failed to open SRM");
+                    if (floppy[drive]) {
+                        UINT br;
+                        f_lseek(&f_floppy[drive], sector * 512);
+                        if (f_read(&f_floppy[drive], fbuf, 512, &br) == FR_OK) {
+                            fpga_tx_header(0x0a, br+1);
+                            for (UINT i = 0; i < br; i++) {
+                                fpga_tx_byte(fbuf[i]);
                             }
-                        }
-                    } else {
-                        if (floppy[drive]) {
-                            UINT br;
-                            f_lseek(&f_floppy[drive], sector * 512);
-                            if (f_read(&f_floppy[drive], fbuf, 512, &br) == FR_OK) {
-                                fpga_tx_header(0x0a, br+1);
-                                for (UINT i = 0; i < br; i++) {
-                                    fpga_tx_byte(fbuf[i]);
-                                }
-                            } else {
-                                overlay_status("Failed to read floppy");
-                            }
+                        } else {
+                            overlay_status("Failed to read floppy");
                         }
                     }
                     pos = 0;   // reset for next packet
                 } else
                     pos++;
-                
+            } else if (type == 6) {              // bsram file state
+                // buffer[pos-4] = ch;
+                if(pos == 4) {
+                    if(1 == ch) {
+                        // open the SRM file
+                        if(srm_ok) {
+                            if(f_open(&f_srm, srm_fname.c_str(), FA_WRITE|FA_OPEN_EXISTING) != FR_OK)
+                                overlay_status("failed to open SRM");
+                        }
+                    } else if(0 == ch) {
+                        // close the SRM file
+                        if(srm_ok) {
+                            f_close(&f_srm);
+                        }
+                    }
+                    pos = 0;   // reset for next packet
+                } else
+                    pos++;
+            } else if (type == 7) {              // bsram file data
+                if (pos < 6)
+                    buffer[pos-4] = ch;
+                else
+                    fbuf[pos-6] = ch;
+                if (pos == 6+511) {
+                    uint16_t sram_block_num = (buffer[0] << 8) + buffer[1];
+                    if (srm_ok) {
+                        unsigned int bytes_written;
+                        f_lseek(&f_srm, sram_block_num * 512);
+                        if(f_write(&f_srm, fbuf, 512, &bytes_written) != FR_OK)
+                            overlay_status("failed to write data to srm");
+                    }
+                    pos = 0;   // reset for next packet
+                }
             } else {
                 pos = 0; // Reset if we get out of sync
             }
