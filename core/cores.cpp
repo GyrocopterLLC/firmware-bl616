@@ -30,10 +30,14 @@ Menu *create_pcxt_menu(const char *imgdir) {
     return new PcxtMenu(imgdir);
 }
 
+Menu *create_snes_menu(const char *imgdir) {
+    dprint("Creating SNES menu\n");
+    return new SnesMenu(imgdir);
+}
 void init_core_list() {
     core_info_list = {
         {1, "NES", "nes", "nestang.bin", loadnes, create_default_menu},
-        {2, "SNES", "snes", "snestang.bin", loadsnes, create_default_menu},
+        {2, "SNES", "snes", "snestang.bin", loadsnes, create_snes_menu},
         {3, "Game Boy Advance", "gba", "gbatang.bin", loadgba, create_default_menu},
         {4, "MegaDrive / Genesis", "genesis", "mdtang.bin", loadmd, create_default_menu},
         {5, "Sega Master System", "sms", "smstang.bin", loadsms, create_default_menu},

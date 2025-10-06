@@ -38,8 +38,17 @@ struct PcxtMenu: Menu {
     virtual bool on_choose(int idx) override;
 };
 
+struct SnesMenu: Menu {
+    const char *imgdir;
+    SnesMenu(const char *imgdir);
+    virtual void render() override;
+    virtual std::vector<int> get_options() override;
+    virtual bool on_choose(int idx) override;
+};
+
 Menu *create_default_menu(const char *imgdir);
 Menu *create_pcxt_menu(const char *imgdir);
+Menu *create_snes_menu(const char *imgdir);
 
 extern bool floppy[2];
 extern std::string floppy_fname[2];

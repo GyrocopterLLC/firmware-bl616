@@ -135,7 +135,7 @@ static int menu_loadrom(const char *dir) {
     // find core info entry
     core_info *core = NULL;
     string path = fname.substr(fname.find(":")+1);
-    for (int i = 0; i < core_info_list.size(); i++) {
+    for (unsigned int i = 0; i < core_info_list.size(); i++) {
         core_info *c = &core_info_list[i];
         if (path.find(c->rom_dir) == 0) {
             overlay_status("ROM for: %s", c->display_name);
@@ -337,11 +337,16 @@ static void uart1_rx_task(void *pvParameters)
                 if (pos == 6+511) {
                     uint16_t drive = buffer[0] >> 7;
                     uint16_t sector = (buffer[0] & 0x7f) << 8 | buffer[1];
+                    if(active_core == 2) { drive = 0; } // for SNES, only worry about the SRM file on floppy[0]
                     if (floppy[drive]) {
                         UINT br;
                         f_lseek(&f_floppy[drive], sector * 512);
                         if (f_write(&f_floppy[drive], fbuf, 512, &br) != FR_OK) {
-                            overlay_status("Failed to write floppy");
+                            if(active_core == 2) {
+                                overlay_status("Failed to write to SRM");
+                            } else {
+                                overlay_status("Failed to write floppy");
+                            }
                         }
                     }
                     pos = 0;   // reset for next packet
@@ -352,22 +357,36 @@ static void uart1_rx_task(void *pvParameters)
                 if (pos == 5) {
                     uint16_t drive = buffer[0] >> 7;
                     uint16_t sector = (buffer[0] & 0x7f) << 8 | buffer[1];
-                    if (floppy[drive]) {
-                        UINT br;
-                        f_lseek(&f_floppy[drive], sector * 512);
-                        if (f_read(&f_floppy[drive], fbuf, 512, &br) == FR_OK) {
-                            fpga_tx_header(0x0a, br+1);
-                            for (UINT i = 0; i < br; i++) {
-                                fpga_tx_byte(fbuf[i]);
+                    if(active_core == 2) { // SNES core uses this command to open or close the SRM file
+                        // Notes:
+                        // drive is unused. always drive[0] for the srm file
+                        // sector = 1 to open file, 0 to close file
+                        if(floppy[0]) { // don't try unless SRM already setup in loadsnes
+                            if(sector == 0) {
+                                f_close(&f_floppy[0]);
+                            } else if(sector == 1) {
+                                if(f_open(&f_floppy[0], floppy_fname[0].c_str(), FA_WRITE|FA_OPEN_EXISTING) != FR_OK)
+                                    overlay_status("failed to open SRM");
                             }
-                        } else {
-                            overlay_status("Failed to read floppy");
+                        }
+                    } else {
+                        if (floppy[drive]) {
+                            UINT br;
+                            f_lseek(&f_floppy[drive], sector * 512);
+                            if (f_read(&f_floppy[drive], fbuf, 512, &br) == FR_OK) {
+                                fpga_tx_header(0x0a, br+1);
+                                for (UINT i = 0; i < br; i++) {
+                                    fpga_tx_byte(fbuf[i]);
+                                }
+                            } else {
+                                overlay_status("Failed to read floppy");
+                            }
                         }
                     }
                     pos = 0;   // reset for next packet
                 } else
                     pos++;
-
+                
             } else {
                 pos = 0; // Reset if we get out of sync
             }
@@ -493,6 +512,8 @@ static void main_task(void *pvParameters)
                     Menu *menu;
                     if (active_core == 6) {
                         menu = create_pcxt_menu(std::string(drv).append(core->rom_dir).c_str());
+                    } else if (active_core == 2) {
+                        menu = create_snes_menu(std::string(drv).append(core->rom_dir).c_str());
                     } else {
                         menu = create_default_menu(std::string(drv).append(core->rom_dir).c_str());
                     }
