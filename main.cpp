@@ -278,7 +278,7 @@ int joy_choice(int start_line, int len, int *active, int overlay_key_code) {
 static void uart1_rx_task(void *pvParameters)
 {
     uint8_t buffer[5];
-    uint8_t pos = 0;
+    uint32_t pos = 0;
     uint8_t type = 0;
     uint16_t len = 0;
     
@@ -373,8 +373,9 @@ static void uart1_rx_task(void *pvParameters)
                     if(1 == ch) {
                         // open the SRM file
                         if(srm_ok) {
-                            if(f_open(&f_srm, srm_fname.c_str(), FA_WRITE|FA_OPEN_EXISTING) != FR_OK)
+                            if(f_open(&f_srm, srm_fname.c_str(), FA_WRITE|FA_OPEN_EXISTING) != FR_OK) {
                                 overlay_status("failed to open SRM");
+                            }
                         }
                     } else if(0 == ch) {
                         // close the SRM file
@@ -394,18 +395,23 @@ static void uart1_rx_task(void *pvParameters)
                     uint16_t sram_block_num = (buffer[0] << 8) + buffer[1];
                     if (srm_ok) {
                         unsigned int bytes_written;
-                        f_lseek(&f_srm, sram_block_num * 512);
+                        if(f_lseek(&f_srm, sram_block_num * 512) != FR_OK)
+                            DEBUG("SEEKFAIL");
                         if(f_write(&f_srm, fbuf, 512, &bytes_written) != FR_OK)
                             overlay_status("failed to write data to srm");
+                        if(bytes_written != 512)
+                            DEBUG("WRFAIL");
                     }
                     pos = 0;   // reset for next packet
-                }
+                } else
+                    pos++;
             } else {
                 pos = 0; // Reset if we get out of sync
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1));
+        // vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(0); // just yield
     }
 }
 

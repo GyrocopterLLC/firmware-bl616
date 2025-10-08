@@ -202,6 +202,7 @@ int loadsnesbsram(const char* fname, unsigned int expected_filesize) {
         }
         r = f_close(&f_srm);
         srm_ok = true;
+        DEBUG("srm file okay");
         if(FR_OK != r) {
             overlay_status (".srm file close failure");
             return r;
@@ -220,6 +221,7 @@ int loadsnesbsram(const char* fname, unsigned int expected_filesize) {
             return r;
         }
         srm_ok = true;
+        DEBUG("srm file okay");
 
         unsigned int bytes_read = 0;
         unsigned int total = 0;
