@@ -497,6 +497,8 @@ static void main_task(void *pvParameters)
                         overlay_printf("Cores");
                     } else if (main_menu_config[i] == -2) {
                         overlay_printf("Options");
+                    } else if (main_menu_config[i] == -3) {
+                        overlay_printf("PlayStation");
                     }
                 }
 
@@ -567,7 +569,13 @@ static void main_task(void *pvParameters)
         } else if (main_menu_config[choice] == -2) {
             // Options
             menu_options();
-        } 
+        } else if (main_menu_config[choice] == -3) {
+            // PlayStation: psxtang runs its own menus. Once it is up, stay out of its way for good.
+            if (psx_boot()) {
+                for (;;)
+                    vTaskDelay(portMAX_DELAY);
+            }
+        }
 
         delay(300);
     }

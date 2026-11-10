@@ -118,6 +118,7 @@ extern struct bflb_device_s *uart1_dev;
 
 // len: length of payload including the command (>=1)
 extern void fpga_tx_header(int cmd, int len);
+extern void fpga_tx_enable(bool on);
 extern void fpga_tx_byte(uint8_t b);
 
 extern uint32_t get_file_size(const char *fname);

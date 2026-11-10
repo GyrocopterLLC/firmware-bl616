@@ -9,7 +9,7 @@
 // null-terminated list of core info
 std::vector<core_info> core_info_list;
 // Main menu listing:
-// >0: core id, -1: cores menu, -2: options menu, 0: end of list
+// >0: core id, -1: cores menu, -2: options menu, -3: PlayStation (psx.cpp), 0: end of list
 std::vector<int16_t> main_menu_config;
 
 struct core_info *find_core_by_id(uint16_t id) {
@@ -47,6 +47,9 @@ void init_core_list() {
     main_menu_config = {1,2,
 #if defined(TANG_MEGA60K) || defined(TANG_MEGA138K) || defined(TANG_CONSOLE60K) || defined(TANG_CONSOLE138K)
         3,4,5,6,
+#endif
+#if defined(TANG_MEGA138K) || defined(TANG_CONSOLE138K)
+        -3,
 #endif
         -1, -2
     };

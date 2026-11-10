@@ -1,6 +1,15 @@
 #include "utils.h"
 
+// Off while a core that does not speak TangCore's protocol owns the UART (psx.cpp): overlay,
+// debug and printf frames are dropped instead of reaching it.
+static volatile bool fpga_tx_on = true;
+
+void fpga_tx_enable(bool on) {
+    fpga_tx_on = on;
+}
+
 void fpga_tx_header(int cmd, int len) {
+    if (!fpga_tx_on) return;
     bflb_uart_putchar(uart1_dev, 0xAA);
     bflb_uart_putchar(uart1_dev, len >> 8);
     bflb_uart_putchar(uart1_dev, len & 0xFF);
@@ -8,6 +17,7 @@ void fpga_tx_header(int cmd, int len) {
 }
 
 void fpga_tx_byte(uint8_t b) {
+    if (!fpga_tx_on) return;
     bflb_uart_putchar(uart1_dev, b);
 }
 

@@ -30,6 +30,10 @@ extern int loadpc(const char *fname);
 
 extern bool find_core_for_board(std::string &fname, const char *core_name);
 
+// PlayStation (psxtang, 138K boards): program the core, load its AE350 firmware, hand the SD card
+// to the FPGA. True: psxtang is running and the BL616 must leave the UART and the SD card alone.
+extern bool psx_boot(void);
+
 struct PcxtMenu: Menu {
     const char *imgdir;
     PcxtMenu(const char *imgdir);
